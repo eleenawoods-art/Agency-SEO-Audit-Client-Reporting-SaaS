@@ -1,15 +1,28 @@
 import streamlit as st
 import pandas as pd
 from collections import defaultdict
+from io import BytesIO
+from datetime import datetime
 
 from modules.crawler import crawl_website, normalize_url
-from modules.seo_audit import audit_page, audit_links, robots_and_sitemap
+from modules.seo_audit import (
+    audit_page,
+    audit_links,
+    robots_and_sitemap,
+)
 from modules.scoring import (
     calculate_score,
     score_label,
     calculate_category_scores,
 )
 from reports.pdf_report import build_pdf_report
+
+# Excel module
+try:
+    from reports.excel_report import build_excel_report
+    EXCEL_AVAILABLE = True
+except Exception:
+    EXCEL_AVAILABLE = False
 
 
 # =========================================================
@@ -24,153 +37,185 @@ st.set_page_config(
 
 
 # =========================================================
-# CSS
+# CUSTOM CSS
 # =========================================================
 
 st.markdown(
     """
-    <style>
+<style>
 
-    .main-title {
-        font-size: 42px;
-        font-weight: 800;
-        margin-bottom: 2px;
-    }
+.main {
+    background: #f8fafc;
+}
 
-    .subtitle {
-        font-size: 17px;
-        color: #667085;
-        margin-bottom: 25px;
-    }
+.block-container {
+    max-width: 1400px;
+    padding-top: 2rem;
+}
 
-    .hero-card {
-        padding: 28px;
-        border-radius: 20px;
-        background: linear-gradient(
-            135deg,
-            #f8fafc 0%,
-            #eef2ff 100%
-        );
-        border: 1px solid #e2e8f0;
-    }
+h1, h2, h3 {
+    color: #172554;
+}
 
-    .score-title {
-        text-align: center;
-        font-size: 13px;
-        font-weight: 700;
-        color: #667085;
-        letter-spacing: 1px;
-    }
+.hero {
+    background: linear-gradient(
+        135deg,
+        #172554,
+        #1d4ed8
+    );
+    padding: 32px;
+    border-radius: 18px;
+    color: white;
+    margin-bottom: 25px;
+    box-shadow: 0 10px 30px rgba(15,23,42,.15);
+}
 
-    .score-number {
-        text-align: center;
-        font-size: 64px;
-        font-weight: 850;
-        line-height: 1.1;
-        margin-top: 8px;
-    }
+.hero h1 {
+    color: white;
+    margin-bottom: 5px;
+}
 
-    .score-status {
-        text-align: center;
-        font-size: 18px;
-        font-weight: 750;
-        margin-top: 8px;
-    }
+.hero p {
+    color: #dbeafe;
+    font-size: 16px;
+}
 
-    .metric-card {
-        padding: 18px;
-        border-radius: 15px;
-        background: white;
-        border: 1px solid #e4e7ec;
-        text-align: center;
-        min-height: 105px;
-    }
+.section-card {
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    padding: 22px;
+    margin-bottom: 18px;
+    box-shadow: 0 4px 15px rgba(15,23,42,.05);
+}
 
-    .metric-number {
-        font-size: 29px;
-        font-weight: 800;
-    }
+.score-card {
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 18px;
+    padding: 25px;
+    text-align: center;
+    box-shadow: 0 5px 20px rgba(15,23,42,.06);
+}
 
-    .metric-label {
-        font-size: 13px;
-        color: #667085;
-        margin-top: 4px;
-    }
+.score-number {
+    font-size: 58px;
+    font-weight: 800;
+    color: #2563eb;
+}
 
-    .category-card {
-        padding: 18px;
-        border-radius: 15px;
-        background: white;
-        border: 1px solid #e4e7ec;
-    }
+.score-status {
+    font-size: 20px;
+    font-weight: 700;
+    color: #475569;
+}
 
-    .category-name {
-        font-size: 15px;
-        font-weight: 750;
-    }
+.metric-card {
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 15px;
+    padding: 20px;
+    text-align: center;
+    box-shadow: 0 4px 15px rgba(15,23,42,.04);
+}
 
-    .category-number {
-        font-size: 27px;
-        font-weight: 800;
-        margin-top: 5px;
-    }
+.metric-number {
+    font-size: 30px;
+    font-weight: 800;
+}
 
-    .issue-card {
-        padding: 17px;
-        border-radius: 14px;
-        background: white;
-        border: 1px solid #e4e7ec;
-        margin-bottom: 10px;
-    }
+.metric-label {
+    color: #64748b;
+    font-size: 14px;
+    margin-top: 5px;
+}
 
-    .critical-card {
-        border-left: 5px solid #dc2626;
-    }
+.category-card {
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 15px;
+    padding: 18px;
+    margin-bottom: 12px;
+}
 
-    .warning-card {
-        border-left: 5px solid #f59e0b;
-    }
+.category-name {
+    font-weight: 700;
+    color: #172554;
+}
 
-    .issue-title {
-        font-weight: 750;
-        font-size: 15px;
-    }
+.category-number {
+    font-size: 24px;
+    font-weight: 800;
+    color: #2563eb;
+}
 
-    .issue-meta {
-        color: #667085;
-        font-size: 12px;
-        margin-top: 4px;
-    }
+.issue-card {
+    background: white;
+    border-radius: 14px;
+    padding: 18px;
+    margin: 10px 0;
+    border-left: 5px solid #f59e0b;
+    box-shadow: 0 3px 12px rgba(15,23,42,.06);
+}
 
-    .issue-fix {
-        font-size: 13px;
-        margin-top: 9px;
-    }
+.issue-critical {
+    border-left-color: #dc2626;
+}
 
-    .summary-box {
-        padding: 20px;
-        border-radius: 15px;
-        background: #f8fafc;
-        border-left: 5px solid #4f46e5;
-        line-height: 1.7;
-        margin-bottom: 18px;
-    }
+.issue-warning {
+    border-left-color: #f59e0b;
+}
 
-    .action-box {
-        padding: 18px;
-        border-radius: 14px;
-        background: #f8fafc;
-        border: 1px solid #e4e7ec;
-        margin-bottom: 9px;
-    }
+.issue-passed {
+    border-left-color: #16a34a;
+}
 
-    .action-number {
-        font-weight: 800;
-        margin-right: 8px;
-    }
+.issue-title {
+    font-weight: 750;
+    font-size: 16px;
+    color: #172554;
+}
 
-    </style>
-    """,
+.issue-meta {
+    color: #64748b;
+    font-size: 13px;
+    margin-top: 6px;
+}
+
+.issue-fix {
+    margin-top: 10px;
+    color: #334155;
+    font-size: 14px;
+}
+
+.action-card {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    padding: 17px;
+    margin: 9px 0;
+}
+
+.action-number {
+    display: inline-block;
+    background: #2563eb;
+    color: white;
+    width: 28px;
+    height: 28px;
+    text-align: center;
+    line-height: 28px;
+    border-radius: 50%;
+    margin-right: 8px;
+    font-weight: 700;
+}
+
+.small-muted {
+    color: #64748b;
+    font-size: 13px;
+}
+
+</style>
+""",
     unsafe_allow_html=True,
 )
 
@@ -179,159 +224,293 @@ st.markdown(
 # HELPERS
 # =========================================================
 
+def safe_value(value, default=""):
+    if value is None:
+        return default
+
+    if isinstance(value, float) and pd.isna(value):
+        return default
+
+    return value
+
+
 def normalize_category(category):
+    category = str(category or "Other").strip()
+
     mapping = {
-        "Images": "Image SEO",
-        "Image SEO": "Image SEO",
-        "Technical": "Technical SEO",
-        "Technical SEO": "Technical SEO",
-        "On-Page": "On-Page SEO",
-        "On-Page SEO": "On-Page SEO",
-        "Content": "Content",
-        "Social": "Social SEO",
-        "Social SEO": "Social SEO",
-        "Security": "Security",
-        "Mobile": "Mobile SEO",
-        "Mobile SEO": "Mobile SEO",
+        "technical": "Technical SEO",
+        "technical seo": "Technical SEO",
+        "on-page": "On-Page SEO",
+        "on-page seo": "On-Page SEO",
+        "content": "Content",
+        "image": "Image SEO",
+        "image seo": "Image SEO",
+        "images": "Image SEO",
+        "social": "Social SEO",
+        "social seo": "Social SEO",
+        "security": "Security",
+        "mobile": "Mobile SEO",
+        "mobile seo": "Mobile SEO",
     }
 
     return mapping.get(
+        category.lower(),
         category,
-        category or "Other"
     )
+
+
+def get_result_url(result):
+    """
+    Try all common URL field names.
+    """
+
+    possible = [
+        "url",
+        "URL",
+        "page_url",
+        "pageUrl",
+        "page",
+        "Page",
+        "source_url",
+        "source",
+    ]
+
+    for key in possible:
+        value = result.get(key)
+
+        if value:
+            return str(value).strip()
+
+    return ""
+
+
+def attach_page_url(results, page_url):
+    """
+    Guarantees every audit result has a page URL.
+    """
+
+    fixed = []
+
+    for result in results:
+
+        if not isinstance(result, dict):
+            continue
+
+        item = dict(result)
+
+        if not get_result_url(item):
+            item["url"] = page_url
+
+        fixed.append(item)
+
+    return fixed
 
 
 def aggregate_issues(results):
     """
-    Groups identical findings together.
-
-    Example:
-    '9 images missing alt text'
-    '1 image missing alt text'
-    '24 images missing alt text'
-
-    becomes one client-friendly finding.
+    Creates client-friendly aggregated findings while
+    preserving affected URLs.
     """
 
-    groups = defaultdict(
-        lambda: {
-            "category": "",
-            "severity": "",
-            "issue": "",
-            "recommendation": "",
-            "count": 0,
-            "pages": set(),
-        }
-    )
+    groups = {}
 
     for result in results:
 
         category = normalize_category(
-            result.get("category")
+            result.get(
+                "category",
+                "Other",
+            )
         )
 
-        severity = result.get(
-            "severity",
-            "Warning"
-        )
+        severity = str(
+            result.get(
+                "severity",
+                "Warning",
+            )
+        ).strip()
 
-        issue = result.get(
-            "issue",
-            "SEO issue"
-        )
+        issue = str(
+            result.get(
+                "issue",
+                result.get(
+                    "message",
+                    "SEO issue",
+                ),
+            )
+        ).strip()
 
-        recommendation = result.get(
-            "recommendation",
-            "Review and fix this issue."
-        )
+        recommendation = str(
+            result.get(
+                "recommendation",
+                result.get(
+                    "fix",
+                    "Review and fix this issue.",
+                ),
+            )
+        ).strip()
 
-        # Remove changing numeric prefixes so similar
-        # findings can be grouped.
-        import re
+        url = get_result_url(result)
 
-        normalized_issue = re.sub(
-            r"^\d+\s+",
-            "",
-            issue
-        )
+        lower = issue.lower()
 
-        normalized_issue = re.sub(
-            r"\b\d+\s+image\(s\)",
-            "IMAGE_COUNT image(s)",
-            normalized_issue,
-            flags=re.IGNORECASE
-        )
+        if "missing alt text" in lower:
+            issue_key = "missing_alt_text"
 
-        normalized_issue = re.sub(
-            r"\b\d+\s+recommended security header\(s\)",
-            "SECURITY_HEADERS recommended security header(s)",
-            normalized_issue,
-            flags=re.IGNORECASE
-        )
+        elif (
+            "security header" in lower
+            and "missing" in lower
+        ):
+            issue_key = "missing_security_headers"
 
-        key = (
+        elif (
+            "meta description" in lower
+            and "missing" in lower
+        ):
+            issue_key = "missing_meta_description"
+
+        elif "title tag is too short" in lower:
+            issue_key = "short_title"
+
+        elif "title tag may be too long" in lower:
+            issue_key = "long_title"
+
+        elif (
+            "meta description may be too long"
+            in lower
+        ):
+            issue_key = "long_meta_description"
+
+        elif "open graph" in lower:
+            issue_key = "incomplete_open_graph"
+
+        elif "multiple h1" in lower:
+            issue_key = "multiple_h1"
+
+        else:
+            issue_key = lower
+
+        group_key = (
             category,
             severity,
-            normalized_issue.lower()
+            issue_key,
         )
 
-        group = groups[key]
+        if group_key not in groups:
 
-        group["category"] = category
-        group["severity"] = severity
-        group["issue"] = normalized_issue
-        group["recommendation"] = recommendation
+            groups[group_key] = {
+                "category": category,
+                "severity": severity,
+                "issue_key": issue_key,
+                "recommendation": recommendation,
+                "occurrences": 0,
+                "pages": set(),
+                "numeric_values": [],
+            }
 
-        # Every individual audit result counts.
-        group["count"] += 1
+        group = groups[group_key]
 
-        # Try common page fields.
-        page = (
-            result.get("url")
-            or result.get("page")
-            or result.get("Page")
-            or result.get("URL")
+        group["occurrences"] += 1
+
+        if url:
+            group["pages"].add(url)
+
+        # Extract numeric count from issue text.
+        import re
+
+        numbers = re.findall(
+            r"\b\d+\b",
+            issue,
         )
 
-        if page:
-            group["pages"].add(page)
+        for number in numbers:
+
+            try:
+                group["numeric_values"].append(
+                    int(number)
+                )
+            except Exception:
+                pass
 
     aggregated = []
 
     for group in groups.values():
 
+        key = group["issue_key"]
+
+        numeric_total = sum(
+            group["numeric_values"]
+        )
+
+        if key == "missing_alt_text":
+
+            if numeric_total > 0:
+                title = (
+                    f"{numeric_total} image"
+                    f"{'s' if numeric_total != 1 else ''} "
+                    "missing alt text"
+                )
+            else:
+                title = "Images missing alt text"
+
+        elif key == "missing_security_headers":
+
+            if numeric_total > 0:
+                title = (
+                    f"{numeric_total} recommended security "
+                    f"header{'s' if numeric_total != 1 else ''} missing"
+                )
+            else:
+                title = (
+                    "Recommended security headers missing"
+                )
+
+        elif key == "missing_meta_description":
+            title = "Missing meta description"
+
+        elif key == "short_title":
+            title = "Title tag is too short"
+
+        elif key == "long_title":
+            title = "Title tag may be too long"
+
+        elif key == "long_meta_description":
+            title = (
+                "Meta description may be too long"
+            )
+
+        elif key == "incomplete_open_graph":
+            title = (
+                "Incomplete Open Graph metadata"
+            )
+
+        elif key == "multiple_h1":
+            title = "Multiple H1 headings"
+
+        else:
+
+            title = (
+                group["issue_key"]
+                .replace("_", " ")
+                .capitalize()
+            )
+
         pages = sorted(
             group["pages"]
         )
-
-        issue_text = group["issue"]
-
-        # Restore useful wording for image findings.
-        if "IMAGE_COUNT" in issue_text:
-
-            issue_text = (
-                "Images missing alt text"
-            )
-
-        if "SECURITY_HEADERS" in issue_text:
-
-            issue_text = (
-                "Recommended security headers missing"
-            )
 
         aggregated.append(
             {
                 "category": group["category"],
                 "severity": group["severity"],
-                "issue": issue_text,
+                "issue": title,
                 "recommendation": group["recommendation"],
-                "occurrences": group["count"],
+                "occurrences": group["occurrences"],
                 "affected_pages": len(pages),
                 "pages": pages,
             }
         )
 
-    # Critical first, then warnings, then passed.
     priority = {
         "Critical": 0,
         "Warning": 1,
@@ -339,20 +518,84 @@ def aggregate_issues(results):
     }
 
     aggregated.sort(
-        key=lambda item: (
+        key=lambda x: (
             priority.get(
-                item["severity"],
-                3
+                x["severity"],
+                3,
             ),
-            -item["occurrences"],
+            -x["occurrences"],
         )
     )
 
     return aggregated
 
 
+def result_dataframe(results):
+    """
+    Clean detailed findings dataframe.
+    """
+
+    rows = []
+
+    for result in results:
+
+        rows.append(
+            {
+                "Severity": safe_value(
+                    result.get("severity")
+                ),
+                "Category": normalize_category(
+                    result.get(
+                        "category",
+                        "Other",
+                    )
+                ),
+                "Issue": safe_value(
+                    result.get("issue")
+                    or result.get("message")
+                ),
+                "Recommended Fix": safe_value(
+                    result.get(
+                        "recommendation"
+                    )
+                    or result.get("fix")
+                ),
+                "Page / URL": get_result_url(
+                    result
+                ),
+            }
+        )
+
+    df = pd.DataFrame(rows)
+
+    if df.empty:
+        return df
+
+    order = {
+        "Critical": 0,
+        "Warning": 1,
+        "Passed": 2,
+    }
+
+    df["_order"] = (
+        df["Severity"]
+        .map(order)
+        .fillna(3)
+    )
+
+    df = df.sort_values(
+        "_order"
+    ).drop(
+        columns="_order"
+    )
+
+    return df
+
+
 def get_action_plan(aggregated):
-    actions = []
+    """
+    Critical issues first, then warnings.
+    """
 
     critical = [
         item
@@ -366,43 +609,172 @@ def get_action_plan(aggregated):
         if item["severity"] == "Warning"
     ]
 
-    for item in critical[:3]:
+    return (
+        critical + warnings
+    )[:6]
 
-        actions.append(
-            (
-                "Critical",
-                item["issue"],
-                item["recommendation"]
+
+def status_for_category(score):
+    try:
+        score = float(score)
+    except Exception:
+        return "Unknown"
+
+    if score >= 90:
+        return "Excellent"
+
+    if score >= 75:
+        return "Good"
+
+    if score >= 50:
+        return "Needs Improvement"
+
+    return "Poor"
+
+
+def flatten_pages(crawled_pages):
+    """
+    Convert crawler output into a clean list.
+    """
+
+    output = []
+
+    if isinstance(
+        crawled_pages,
+        dict,
+    ):
+        iterable = list(
+            crawled_pages.values()
+        )
+    else:
+        iterable = crawled_pages or []
+
+    for page in iterable:
+
+        if isinstance(page, str):
+
+            output.append(
+                {
+                    "URL": page,
+                    "Status": "",
+                    "Title": "",
+                    "Issues": "",
+                }
             )
+
+            continue
+
+        if not isinstance(page, dict):
+            continue
+
+        output.append(
+            {
+                "URL": (
+                    page.get("url")
+                    or page.get("URL")
+                    or ""
+                ),
+                "Status": (
+                    page.get("status")
+                    or page.get("Status")
+                    or page.get("status_code")
+                    or ""
+                ),
+                "Title": (
+                    page.get("title")
+                    or page.get("Title")
+                    or ""
+                ),
+                "Issues": (
+                    page.get("issues")
+                    or page.get("Issues")
+                    or 0
+                ),
+            }
         )
 
-    for item in warnings[:5]:
+    return output
 
-        actions.append(
-            (
-                "Warning",
-                item["issue"],
-                item["recommendation"]
-            )
+
+def clean_broken_links(data):
+    if data is None:
+        return []
+
+    if isinstance(data, pd.DataFrame):
+        return data.to_dict(
+            orient="records"
         )
 
-    return actions[:6]
+    if isinstance(data, list):
+        return [
+            item
+            for item in data
+            if isinstance(item, dict)
+        ]
+
+    if isinstance(data, dict):
+        return [data]
+
+    return []
+
+
+def clean_technical_data(data):
+    """
+    Keeps robots/sitemap output safe for Excel.
+    """
+
+    if not isinstance(data, dict):
+        return {}
+
+    return data
 
 
 # =========================================================
-# HEADER
+# SESSION STATE
+# =========================================================
+
+if "audit_complete" not in st.session_state:
+    st.session_state.audit_complete = False
+
+if "all_results" not in st.session_state:
+    st.session_state.all_results = []
+
+if "aggregated" not in st.session_state:
+    st.session_state.aggregated = []
+
+if "audit_pages" not in st.session_state:
+    st.session_state.audit_pages = []
+
+if "broken_links" not in st.session_state:
+    st.session_state.broken_links = []
+
+if "technical_data" not in st.session_state:
+    st.session_state.technical_data = {}
+
+if "score" not in st.session_state:
+    st.session_state.score = 0
+
+if "score_status" not in st.session_state:
+    st.session_state.score_status = ""
+
+
+# =========================================================
+# HERO
 # =========================================================
 
 st.markdown(
-    '<div class="main-title">🔎 Agency SEO Auditor</div>',
-    unsafe_allow_html=True
-)
+    """
+<div class="hero">
 
-st.markdown(
-    '<div class="subtitle">'
-    'Professional SEO auditing and client reporting platform'
-    '</div>',
-    unsafe_allow_html=True
+<h1>🔎 Agency SEO Auditor v6.0</h1>
+
+<p>
+Professional SEO auditing and client reporting platform
+</p>
+
+</div>
+""",
+    unsafe_allow_html=True,
 )
 
 
@@ -412,48 +784,50 @@ st.markdown(
 
 with st.sidebar:
 
-    st.header("🏢 Agency Profile")
+    st.markdown(
+        "## 🏢 Agency Profile"
+    )
 
     agency_name = st.text_input(
         "Agency Name",
-        value="Your SEO Agency"
+        placeholder="Your Agency",
     )
 
     agency_website = st.text_input(
         "Agency Website",
-        placeholder="https://youragency.com"
+        placeholder="https://youragency.com",
     )
 
     agency_email = st.text_input(
         "Agency Email",
-        placeholder="hello@youragency.com"
+        placeholder="hello@youragency.com",
     )
 
-    logo_file = st.file_uploader(
+    agency_logo = st.file_uploader(
         "Agency Logo",
-        type=["png", "jpg", "jpeg"]
+        type=[
+            "png",
+            "jpg",
+            "jpeg",
+        ],
     )
 
-    st.divider()
+    st.markdown("---")
 
-    st.header("⚙️ Audit Settings")
+    st.markdown(
+        "## ⚙️ Audit Settings"
+    )
 
     max_pages = st.slider(
         "Pages to crawl",
-        1,
-        30,
-        10
+        min_value=1,
+        max_value=30,
+        value=10,
     )
 
-    check_links = st.checkbox(
+    check_broken = st.checkbox(
         "Check broken links",
-        value=True
-    )
-
-    st.divider()
-
-    st.caption(
-        "Agency SEO Auditor v5.0"
+        value=True,
     )
 
 
@@ -461,8 +835,8 @@ with st.sidebar:
 # CLIENT INFORMATION
 # =========================================================
 
-st.subheader(
-    "👤 Client Information"
+st.markdown(
+    "## 👤 Client Information"
 )
 
 client_col1, client_col2 = st.columns(2)
@@ -471,38 +845,41 @@ with client_col1:
 
     client_name = st.text_input(
         "Client / Company Name",
-        placeholder="Example: ABC Digital"
+        placeholder="Client Company",
     )
 
 with client_col2:
 
     client_website = st.text_input(
         "Client Website",
-        placeholder="https://example.com"
+        placeholder="https://client.com",
     )
 
 
-# =========================================================
-# AUDIT URL
-# =========================================================
+st.markdown(
+    "### 🌐 Website URL to Audit"
+)
 
 audit_url = st.text_input(
-    "🌐 Website URL to Audit",
-    placeholder="https://example.com"
+    "Website URL",
+    value=client_website,
+    placeholder="https://example.com",
+    label_visibility="collapsed",
 )
 
-audit_button = st.button(
+
+# =========================================================
+# START AUDIT
+# =========================================================
+
+start_audit = st.button(
     "🚀 Start SEO Audit",
     type="primary",
-    use_container_width=True
+    use_container_width=True,
 )
 
 
-# =========================================================
-# RUN AUDIT
-# =========================================================
-
-if audit_button:
+if start_audit:
 
     if not audit_url.strip():
 
@@ -512,460 +889,618 @@ if audit_button:
 
         st.stop()
 
-    audit_url = normalize_url(
-        audit_url
-    )
+    try:
 
-    if not client_website.strip():
-
-        client_website = audit_url
-
-    with st.spinner(
-        "Crawling website and analyzing SEO..."
-    ):
-
-        pages = crawl_website(
-            audit_url,
-            max_pages=max_pages
+        normalized_url = normalize_url(
+            audit_url.strip()
         )
 
-    if not pages:
+        progress = st.progress(
+            0
+        )
+
+        status = st.empty()
+
+        # -------------------------------------------------
+        # CRAWL
+        # -------------------------------------------------
+
+        status.write(
+            "🌐 Crawling website..."
+        )
+
+        crawled = crawl_website(
+            normalized_url,
+            max_pages=max_pages,
+        )
+
+        progress.progress(
+            25
+        )
+
+        # -------------------------------------------------
+        # NORMALIZE CRAWLER OUTPUT
+        # -------------------------------------------------
+
+        pages_for_audit = []
+
+        if isinstance(
+            crawled,
+            dict,
+        ):
+
+            pages_for_audit = list(
+                crawled.values()
+            )
+
+        elif isinstance(
+            crawled,
+            list,
+        ):
+
+            pages_for_audit = crawled
+
+        # -------------------------------------------------
+        # AUDIT EACH PAGE
+        # -------------------------------------------------
+
+        status.write(
+            "🔎 Running SEO checks..."
+        )
+
+        all_results = []
+
+        for index, page in enumerate(
+            pages_for_audit
+        ):
+
+            page_url = ""
+
+            if isinstance(
+                page,
+                str,
+            ):
+
+                page_url = page
+
+            elif isinstance(
+                page,
+                dict,
+            ):
+
+                page_url = (
+                    page.get("url")
+                    or page.get("URL")
+                    or ""
+                )
+
+            if not page_url:
+                continue
+
+            try:
+
+                page_results = audit_page(
+                    page
+                )
+
+            except Exception:
+
+                try:
+
+                    page_results = audit_page(
+                        page_url
+                    )
+
+                except Exception:
+                    page_results = []
+
+            page_results = attach_page_url(
+                page_results,
+                page_url,
+            )
+
+            all_results.extend(
+                page_results
+            )
+
+            progress.progress(
+                min(
+                    25
+                    + int(
+                        (
+                            (index + 1)
+                            / max(
+                                len(
+                                    pages_for_audit
+                                ),
+                                1,
+                            )
+                        )
+                        * 35
+                    ),
+                    60,
+                )
+            )
+
+        # -------------------------------------------------
+        # BROKEN LINKS
+        # -------------------------------------------------
+
+        broken_links = []
+
+        if check_broken:
+
+            status.write(
+                "🔗 Checking links..."
+            )
+
+            try:
+
+                link_data = audit_links(
+                    pages_for_audit
+                )
+
+                broken_links = clean_broken_links(
+                    link_data
+                )
+
+            except Exception as error:
+
+                st.warning(
+                    f"Broken-link check skipped: {error}"
+                )
+
+        progress.progress(
+            75
+        )
+
+        # -------------------------------------------------
+        # ROBOTS + SITEMAP
+        # -------------------------------------------------
+
+        status.write(
+            "⚙️ Checking robots.txt and sitemap..."
+        )
+
+        try:
+
+            technical_data = robots_and_sitemap(
+                normalized_url
+            )
+
+        except Exception:
+
+            technical_data = {}
+
+        progress.progress(
+            85
+        )
+
+        # -------------------------------------------------
+        # SCORE
+        # -------------------------------------------------
+
+        status.write(
+            "📊 Calculating SEO score..."
+        )
+
+        try:
+
+            score = calculate_score(
+                all_results
+            )
+
+        except Exception:
+
+            score = 0
+
+        try:
+
+            score_text = score_label(
+                score
+            )
+
+        except Exception:
+
+            score_text = (
+                "Good"
+                if score >= 75
+                else "Needs Improvement"
+            )
+
+        # -------------------------------------------------
+        # AGGREGATION
+        # -------------------------------------------------
+
+        aggregated = aggregate_issues(
+            all_results
+        )
+
+        # -------------------------------------------------
+        # SAVE RESULTS
+        # -------------------------------------------------
+
+        st.session_state.audit_complete = True
+        st.session_state.all_results = all_results
+        st.session_state.aggregated = aggregated
+        st.session_state.audit_pages = flatten_pages(
+            pages_for_audit
+        )
+        st.session_state.broken_links = broken_links
+        st.session_state.technical_data = clean_technical_data(
+            technical_data
+        )
+        st.session_state.score = score
+        st.session_state.score_status = score_text
+
+        progress.progress(
+            100
+        )
+
+        status.success(
+            "✅ SEO audit completed successfully."
+        )
+
+    except Exception as error:
 
         st.error(
-            "Unable to crawl this website. "
-            "Please check the URL and try again."
+            f"Audit failed: {error}"
         )
 
         st.stop()
 
-    all_results = []
-    page_summaries = []
-    broken_links = []
-
-    progress = st.progress(0)
-
-    for index, page in enumerate(pages):
-
-        results = audit_page(
-            page
-        )
-
-        all_results.extend(
-            results
-        )
-
-        issue_count = sum(
-            1
-            for result in results
-            if result.get("severity")
-            in ["Critical", "Warning"]
-        )
-
-        page_summaries.append(
-            {
-                "URL": page["url"],
-                "Status": page["status"],
-                "Title": page["title"],
-                "Issues": issue_count
-            }
-        )
-
-        if check_links:
-
-            try:
-
-                broken = audit_links(
-                    page
-                )
-
-                for item in broken:
-
-                    item["Page"] = page["url"]
-
-                    broken_links.append(
-                        item
-                    )
-
-            except Exception:
-
-                pass
-
-        progress.progress(
-            (index + 1) / len(pages)
-        )
-
-    technical_files = robots_and_sitemap(
-        audit_url
-    )
-
-    score = calculate_score(
-        all_results
-    )
-
-    label = score_label(
-        score
-    )
-
-    category_scores = calculate_category_scores(
-        all_results
-    )
-
-    aggregated = aggregate_issues(
-        all_results
-    )
-
-    action_plan = get_action_plan(
-        aggregated
-    )
-
-    st.session_state["results"] = all_results
-    st.session_state["aggregated"] = aggregated
-    st.session_state["action_plan"] = action_plan
-    st.session_state["pages"] = page_summaries
-    st.session_state["broken_links"] = broken_links
-    st.session_state["score"] = score
-    st.session_state["label"] = label
-    st.session_state["category_scores"] = category_scores
-    st.session_state["technical_files"] = technical_files
-    st.session_state["audit_url"] = audit_url
-
 
 # =========================================================
-# DISPLAY RESULTS
+# DASHBOARD
 # =========================================================
 
-if "results" in st.session_state:
+if st.session_state.audit_complete:
 
-    results = st.session_state["results"]
+    all_results = (
+        st.session_state.all_results
+    )
 
-    aggregated = st.session_state[
-        "aggregated"
-    ]
+    aggregated = (
+        st.session_state.aggregated
+    )
 
-    action_plan = st.session_state[
-        "action_plan"
-    ]
+    pages = (
+        st.session_state.audit_pages
+    )
 
-    pages = st.session_state["pages"]
+    broken_links = (
+        st.session_state.broken_links
+    )
 
-    broken_links = st.session_state[
-        "broken_links"
-    ]
+    technical_data = (
+        st.session_state.technical_data
+    )
 
-    score = st.session_state["score"]
+    score = (
+        st.session_state.score
+    )
 
-    label = st.session_state["label"]
+    score_text = (
+        st.session_state.score_status
+    )
 
-    category_scores = st.session_state[
-        "category_scores"
-    ]
-
-    technical_files = st.session_state[
-        "technical_files"
-    ]
-
-    audit_url = st.session_state[
-        "audit_url"
-    ]
-
-
-    # =====================================================
+    # -----------------------------------------------------
     # COUNTS
-    # =====================================================
+    # -----------------------------------------------------
 
-    critical = sum(
+    critical_count = sum(
         1
-        for result in results
-        if result.get("severity") == "Critical"
+        for result in all_results
+        if result.get("severity")
+        == "Critical"
     )
 
-    warnings = sum(
+    warning_count = sum(
         1
-        for result in results
-        if result.get("severity") == "Warning"
+        for result in all_results
+        if result.get("severity")
+        == "Warning"
     )
 
-    passed = sum(
+    passed_count = sum(
         1
-        for result in results
-        if result.get("severity") == "Passed"
+        for result in all_results
+        if result.get("severity")
+        == "Passed"
     )
 
-    total_checks = len(results)
-
-
-    # =====================================================
+    # -----------------------------------------------------
     # DASHBOARD
-    # =====================================================
+    # -----------------------------------------------------
 
-    st.divider()
-
-    st.subheader(
-        "📊 SEO Performance Dashboard"
+    st.markdown(
+        "## 📊 SEO Performance Dashboard"
     )
 
-    st.caption(
+    st.info(
         "Client-ready website health overview "
         "and prioritized SEO recommendations."
     )
 
-
-    # =====================================================
-    # EXECUTIVE SUMMARY
-    # =====================================================
-
-    summary = (
-        f"The website currently has an SEO score of "
-        f"<b>{score}/100</b>, classified as "
-        f"<b>{label}</b>. "
-        f"The audit detected <b>{critical}</b> critical "
-        f"issues, <b>{warnings}</b> warnings, and "
-        f"<b>{passed}</b> passed checks."
-    )
-
     st.markdown(
         f"""
-        <div class="summary-box">
-            <b>Executive Summary</b><br>
-            {summary}
-        </div>
-        """,
-        unsafe_allow_html=True
+### Executive Summary
+
+The website currently has an SEO score of
+**{score}/100**, classified as **{score_text}**.
+
+The audit detected **{critical_count}**
+critical issues, **{warning_count}**
+warnings, and **{passed_count}**
+passed checks.
+"""
     )
 
-
-    # =====================================================
+    # -----------------------------------------------------
     # SCORE + METRICS
-    # =====================================================
+    # -----------------------------------------------------
 
-    score_col, metric_col = st.columns(
-        [1, 2]
-    )
+    c1, c2, c3, c4 = st.columns(4)
 
-    with score_col:
+    with c1:
 
         st.markdown(
             f"""
-            <div class="hero-card">
+<div class="score-card">
 
-                <div class="score-title">
-                    OVERALL SEO SCORE
-                </div>
+<div>
+OVERALL SEO SCORE
+</div>
 
-                <div class="score-number">
-                    {score}
-                </div>
+<div class="score-number">
+{score}
+</div>
 
-                <div class="score-title">
-                    OUT OF 100
-                </div>
+<div>
+OUT OF 100
+</div>
 
-                <div class="score-status">
-                    {label}
-                </div>
+<div class="score-status">
+{score_text}
+</div>
 
-            </div>
-            """,
-            unsafe_allow_html=True
+</div>
+""",
+            unsafe_allow_html=True,
         )
 
-        st.progress(
-            score / 100
+    with c2:
+
+        st.markdown(
+            f"""
+<div class="metric-card">
+
+<div class="metric-number">
+🔴 {critical_count}
+</div>
+
+<div class="metric-label">
+Critical Issues
+</div>
+
+</div>
+""",
+            unsafe_allow_html=True,
         )
 
-    with metric_col:
+    with c3:
 
-        cols = st.columns(3)
+        st.markdown(
+            f"""
+<div class="metric-card">
 
-        metrics = [
-            ("🔴", critical, "Critical Issues"),
-            ("🟠", warnings, "Warnings"),
-            ("🟢", passed, "Passed Checks"),
-        ]
+<div class="metric-number">
+🟠 {warning_count}
+</div>
 
-        for col, metric in zip(
-            cols,
-            metrics
-        ):
+<div class="metric-label">
+Warnings
+</div>
 
-            icon, value, title = metric
-
-            with col:
-
-                st.markdown(
-                    f"""
-                    <div class="metric-card">
-
-                        <div class="metric-number">
-                            {icon} {value}
-                        </div>
-
-                        <div class="metric-label">
-                            {title}
-                        </div>
-
-                    </div>
-                    """,
-                    unsafe_allow_html=True
-                )
-
-        st.info(
-            f"Audited website: {audit_url}"
+</div>
+""",
+            unsafe_allow_html=True,
         )
 
+    with c4:
 
-    # =====================================================
-    # CATEGORY SCORES
-    # =====================================================
+        st.markdown(
+            f"""
+<div class="metric-card">
 
-    st.subheader(
-        "📈 SEO Category Performance"
+<div class="metric-number">
+🟢 {passed_count}
+</div>
+
+<div class="metric-label">
+Passed Checks
+</div>
+
+</div>
+""",
+            unsafe_allow_html=True,
+        )
+
+    st.markdown(
+        f"**Audited website:** `{audit_url}`"
     )
 
-    category_order = [
-        "Technical SEO",
-        "On-Page SEO",
-        "Content",
-        "Image SEO",
-        "Social SEO",
-        "Security",
-        "Mobile SEO",
-    ]
+    # -----------------------------------------------------
+    # CATEGORY PERFORMANCE
+    # -----------------------------------------------------
 
-    normalized_scores = {}
+    st.markdown(
+        "## 📈 SEO Category Performance"
+    )
 
-    for category, value in category_scores.items():
+    try:
 
-        normalized_scores[
-            normalize_category(category)
-        ] = value
+        category_scores = (
+            calculate_category_scores(
+                all_results
+            )
+        )
 
-    available_categories = [
-        category
-        for category in category_order
-        if category in normalized_scores
-    ]
+    except Exception:
 
-    for start in range(
-        0,
-        len(available_categories),
-        3
+        category_scores = {}
+
+    if isinstance(
+        category_scores,
+        dict,
     ):
 
-        current = available_categories[
-            start:start + 3
-        ]
-
-        cols = st.columns(
-            len(current)
+        category_items = list(
+            category_scores.items()
         )
 
-        for col, category in zip(
-            cols,
-            current
+    else:
+
+        category_items = []
+
+    if category_items:
+
+        for start in range(
+            0,
+            len(category_items),
+            3,
         ):
 
-            value = normalized_scores[
-                category
-            ]
+            cols = st.columns(3)
 
-            if value >= 90:
-                status = "Excellent"
-            elif value >= 75:
-                status = "Good"
-            elif value >= 50:
-                status = "Needs Improvement"
-            else:
-                status = "Poor"
+            for col, item in zip(
+                cols,
+                category_items[
+                    start:start + 3
+                ],
+            ):
 
-            with col:
+                category_name, category_score = item
 
-                st.markdown(
-                    f"""
-                    <div class="category-card">
+                with col:
 
-                        <div class="category-name">
-                            {category}
-                        </div>
+                    try:
+                        numeric_score = float(
+                            category_score
+                        )
+                    except Exception:
+                        numeric_score = 0
 
-                        <div class="category-number">
-                            {value}/100
-                        </div>
+                    category_status = (
+                        status_for_category(
+                            numeric_score
+                        )
+                    )
 
-                    </div>
-                    """,
-                    unsafe_allow_html=True
-                )
+                    st.markdown(
+                        f"""
+<div class="category-card">
 
-                st.progress(
-                    value / 100
-                )
+<div class="category-name">
+{normalize_category(category_name)}
+</div>
 
-                st.caption(
-                    f"Status: {status}"
-                )
+<div class="category-number">
+{numeric_score:.0f}/100
+</div>
+
+<div class="small-muted">
+Status: {category_status}
+</div>
+
+</div>
+""",
+                        unsafe_allow_html=True,
+                    )
 
 
-    # =====================================================
-    # PRIORITY FINDINGS
-    # =====================================================
+    # -----------------------------------------------------
+    # PRIORITIZED FINDINGS
+    # -----------------------------------------------------
 
-    st.subheader(
-        "🚨 Prioritized SEO Findings"
+    st.markdown(
+        "## 🚨 Prioritized SEO Findings"
     )
 
-    critical_findings = [
+    critical_items = [
         item
         for item in aggregated
         if item["severity"] == "Critical"
     ]
 
-    warning_findings = [
+    warning_items = [
         item
         for item in aggregated
         if item["severity"] == "Warning"
     ]
 
-    if critical_findings:
+    passed_items = [
+        item
+        for item in aggregated
+        if item["severity"] == "Passed"
+    ]
 
-        st.markdown(
-            "### 🔴 Critical Issues"
-        )
+    # -----------------------------------------------------
+    # CRITICAL
+    # -----------------------------------------------------
 
-        for item in critical_findings:
+    st.markdown(
+        "### 🔴 Critical Issues"
+    )
 
-            page_text = (
-                f'{item["affected_pages"]} affected page'
-                + (
-                    "s"
-                    if item["affected_pages"] != 1
-                    else ""
-                )
+    if critical_items:
+
+        for item in critical_items:
+
+            page_count = item[
+                "affected_pages"
+            ]
+
+            page_word = (
+                "page"
+                if page_count == 1
+                else "pages"
             )
 
             st.markdown(
                 f"""
-                <div class="issue-card critical-card">
+<div class="issue-card issue-critical">
 
-                    <div class="issue-title">
-                        🔴 {item["issue"]}
-                    </div>
+<div class="issue-title">
+🔴 {item["issue"]}
+</div>
 
-                    <div class="issue-meta">
-                        {item["category"]} ·
-                        {item["occurrences"]} occurrence(s) ·
-                        {page_text}
-                    </div>
+<div class="issue-meta">
+{item["category"]} ·
+{item["occurrences"]} occurrence(s) ·
+{page_count} affected {page_word}
+</div>
 
-                    <div class="issue-fix">
-                        <b>Recommended Fix:</b>
-                        {item["recommendation"]}
-                    </div>
+<div class="issue-fix">
+<b>Recommended Fix:</b>
+{item["recommendation"]}
+</div>
 
-                </div>
-                """,
-                unsafe_allow_html=True
+</div>
+""",
+                unsafe_allow_html=True,
             )
+
+            if item["pages"]:
+
+                with st.expander(
+                    "View affected URLs"
+                ):
+
+                    for url in item["pages"]:
+                        st.write(
+                            f"• {url}"
+                        )
 
     else:
 
@@ -973,131 +1508,186 @@ if "results" in st.session_state:
             "No critical issues detected."
         )
 
+    # -----------------------------------------------------
+    # WARNINGS
+    # -----------------------------------------------------
 
-    if warning_findings:
+    st.markdown(
+        "### 🟠 Warnings"
+    )
 
-        st.markdown(
-            "### 🟠 Warnings"
-        )
+    if warning_items:
 
-        for item in warning_findings[:10]:
+        for item in warning_items:
 
-            page_text = (
-                f'{item["affected_pages"]} affected page'
-                + (
-                    "s"
-                    if item["affected_pages"] != 1
-                    else ""
-                )
+            page_count = item[
+                "affected_pages"
+            ]
+
+            page_word = (
+                "page"
+                if page_count == 1
+                else "pages"
             )
 
             st.markdown(
                 f"""
-                <div class="issue-card warning-card">
+<div class="issue-card issue-warning">
 
-                    <div class="issue-title">
-                        🟠 {item["issue"]}
-                    </div>
+<div class="issue-title">
+🟠 {item["issue"]}
+</div>
 
-                    <div class="issue-meta">
-                        {item["category"]} ·
-                        {item["occurrences"]} occurrence(s) ·
-                        {page_text}
-                    </div>
+<div class="issue-meta">
+{item["category"]} ·
+{item["occurrences"]} occurrence(s) ·
+{page_count} affected {page_word}
+</div>
 
-                    <div class="issue-fix">
-                        <b>Recommended Fix:</b>
-                        {item["recommendation"]}
-                    </div>
+<div class="issue-fix">
+<b>Recommended Fix:</b>
+{item["recommendation"]}
+</div>
 
-                </div>
-                """,
-                unsafe_allow_html=True
+</div>
+""",
+                unsafe_allow_html=True,
             )
 
+            if item["pages"]:
 
-    # =====================================================
+                with st.expander(
+                    "View affected URLs"
+                ):
+
+                    for url in item["pages"]:
+                        st.write(
+                            f"• {url}"
+                        )
+
+    else:
+
+        st.success(
+            "No warnings detected."
+        )
+
+    # -----------------------------------------------------
     # ACTION PLAN
-    # =====================================================
+    # -----------------------------------------------------
 
-    st.subheader(
-        "🛠️ Recommended Action Plan"
+    st.markdown(
+        "## 🛠️ Recommended Action Plan"
+    )
+
+    action_plan = get_action_plan(
+        aggregated
     )
 
     if action_plan:
 
         for index, action in enumerate(
             action_plan,
-            start=1
+            start=1,
         ):
 
-            severity, issue, recommendation = action
+            icon = (
+                "🔴"
+                if action["severity"]
+                == "Critical"
+                else "🟠"
+            )
+
+            page_count = action[
+                "affected_pages"
+            ]
+
+            page_word = (
+                "page"
+                if page_count == 1
+                else "pages"
+            )
 
             st.markdown(
                 f"""
-                <div class="action-box">
+<div class="action-card">
 
-                    <span class="action-number">
-                        {index}.
-                    </span>
+<span class="action-number">
+{index}
+</span>
 
-                    <b>{issue}</b>
+<b>
+{icon} {action["issue"]}
+</b>
 
-                    <br>
+<br>
 
-                    <small>
-                        {recommendation}
-                    </small>
+<small>
+{page_count} affected {page_word}
+</small>
 
-                </div>
-                """,
-                unsafe_allow_html=True
+<br><br>
+
+<small>
+<b>Recommended Fix:</b>
+{action["recommendation"]}
+</small>
+
+</div>
+""",
+                unsafe_allow_html=True,
             )
 
     else:
 
         st.success(
-            "No immediate action items. "
-            "The website is performing well."
+            "No immediate action items detected."
         )
 
 
     # =====================================================
-    # PDF REPORT
+    # CLIENT REPORT
     # =====================================================
 
-    st.divider()
-
-    st.subheader(
-        "📄 Client Report"
+    st.markdown(
+        "## 📄 Client Report"
     )
 
-    st.caption(
-        "Generate a professional white-label PDF report "
-        "for your client."
+    st.info(
+        "Generate professional white-label "
+        "reports for your client."
     )
 
-    logo_bytes = None
+    # -----------------------------------------------------
+    # REPORT DATA
+    # -----------------------------------------------------
 
-    if logo_file is not None:
+    report_data = {
+        "agency_name": agency_name,
+        "agency_website": agency_website,
+        "agency_email": agency_email,
+        "client_name": client_name,
+        "client_website": client_website,
+        "audit_url": audit_url,
+        "score": score,
+        "score_label": score_text,
+        "critical": critical_count,
+        "warnings": warning_count,
+        "passed": passed_count,
+        "results": all_results,
+        "aggregated": aggregated,
+        "pages": pages,
+        "broken_links": broken_links,
+        "technical": technical_data,
+    }
 
-        logo_bytes = logo_file.getvalue()
+    # -----------------------------------------------------
+    # PDF
+    # -----------------------------------------------------
 
     try:
 
         pdf_bytes = build_pdf_report(
-            agency_name=agency_name,
-            agency_website=agency_website,
-            agency_email=agency_email,
-            client_name=client_name or "Client",
-            client_website=client_website or audit_url,
-            score=score,
-            score_label=label,
-            results=results,
-            pages=pages,
-            broken_links=broken_links,
-            technical_files=technical_files,
-            logo_bytes=logo_bytes
+            report_data
         )
 
         st.download_button(
@@ -1106,27 +1696,106 @@ if "results" in st.session_state:
             file_name=(
                 "SEO_Audit_Report_"
                 + (
-                    client_name or "Client"
+                    client_name
+                    or "Client"
                 ).replace(
                     " ",
-                    "_"
+                    "_",
                 )
                 + ".pdf"
             ),
             mime="application/pdf",
-            use_container_width=True
+            use_container_width=True,
         )
 
     except Exception as error:
 
-        st.error(
-            f"PDF generation error: {error}"
+        st.warning(
+            "PDF report could not be generated "
+            "with the current PDF module."
+        )
+
+        with st.expander(
+            "PDF technical details"
+        ):
+            st.code(
+                str(error)
+            )
+
+    # -----------------------------------------------------
+    # EXCEL
+    # -----------------------------------------------------
+
+    if EXCEL_AVAILABLE:
+
+        try:
+
+            excel_bytes = build_excel_report(
+                agency_name=agency_name,
+                agency_website=agency_website,
+                agency_email=agency_email,
+                client_name=client_name or "Client",
+                client_website=(
+                    client_website
+                    or audit_url
+                ),
+                score=score,
+                score_label=score_text,
+                results=all_results,
+                pages=pages,
+                broken_links=broken_links,
+                technical_files=technical_data,
+            )
+
+            st.download_button(
+                "📊 Download Professional Excel Report",
+                data=excel_bytes,
+                file_name=(
+                    "SEO_Audit_Report_"
+                    + (
+                        client_name
+                        or "Client"
+                    ).replace(
+                        " ",
+                        "_",
+                    )
+                    + ".xlsx"
+                ),
+                mime=(
+                    "application/vnd.openxmlformats-"
+                    "officedocument.spreadsheetml.sheet"
+                ),
+                use_container_width=True,
+            )
+
+        except Exception as error:
+
+            st.warning(
+                "Excel report could not be generated."
+            )
+
+            with st.expander(
+                "Excel technical details"
+            ):
+                st.code(
+                    str(error)
+                )
+
+    else:
+
+        st.warning(
+            "Professional Excel module is not installed. "
+            "Add reports/excel_report.py to enable it."
         )
 
 
     # =====================================================
-    # DETAILED TABS
+    # DATA EXPORT
     # =====================================================
+
+    st.markdown(
+        "## 📊 Audit Data"
+    )
 
     tab1, tab2, tab3, tab4 = st.tabs(
         [
@@ -1137,22 +1806,27 @@ if "results" in st.session_state:
         ]
     )
 
-
-    # =====================================================
-    # AUDIT RESULTS
-    # =====================================================
+    # -----------------------------------------------------
+    # RESULTS
+    # -----------------------------------------------------
 
     with tab1:
 
-        df = pd.DataFrame(
-            results
+        findings_df = result_dataframe(
+            all_results
         )
 
-        if not df.empty:
+        if findings_df.empty:
+
+            st.info(
+                "No audit findings available."
+            )
+
+        else:
 
             severity_filter = st.multiselect(
                 "Filter by severity",
-                [
+                options=[
                     "Critical",
                     "Warning",
                     "Passed",
@@ -1164,50 +1838,84 @@ if "results" in st.session_state:
                 ],
             )
 
-            filtered = df[
-                df["severity"].isin(
+            filtered_df = findings_df[
+                findings_df["Severity"].isin(
                     severity_filter
                 )
             ]
 
             st.dataframe(
-                filtered,
+                filtered_df,
                 use_container_width=True,
                 hide_index=True,
             )
 
-            csv = filtered.to_csv(
-                index=False
-            ).encode("utf-8")
-
-            st.download_button(
-                "⬇️ Download Audit CSV",
-                csv,
-                "seo_audit_report.csv",
-                "text/csv",
+            # Clean CSV
+            csv_bytes = (
+                filtered_df
+                .to_csv(
+                    index=False
+                )
+                .encode(
+                    "utf-8-sig"
+                )
             )
 
+            st.download_button(
+                "⬇️ Download Clean CSV",
+                data=csv_bytes,
+                file_name=(
+                    "SEO_Audit_Findings.csv"
+                ),
+                mime="text/csv",
+                use_container_width=True,
+            )
 
-    # =====================================================
+    # -----------------------------------------------------
     # PAGES
-    # =====================================================
+    # -----------------------------------------------------
 
     with tab2:
 
-        pages_df = pd.DataFrame(
-            pages
-        )
+        if pages:
 
-        st.dataframe(
-            pages_df,
-            use_container_width=True,
-            hide_index=True,
-        )
+            pages_df = pd.DataFrame(
+                pages
+            )
 
+            st.dataframe(
+                pages_df,
+                use_container_width=True,
+                hide_index=True,
+            )
 
-    # =====================================================
+            pages_csv = (
+                pages_df
+                .to_csv(
+                    index=False
+                )
+                .encode(
+                    "utf-8-sig"
+                )
+            )
+
+            st.download_button(
+                "⬇️ Download Pages CSV",
+                data=pages_csv,
+                file_name="Crawled_Pages.csv",
+                mime="text/csv",
+                use_container_width=True,
+            )
+
+        else:
+
+            st.info(
+                "No crawled pages available."
+            )
+
+    # -----------------------------------------------------
     # BROKEN LINKS
-    # =====================================================
+    # -----------------------------------------------------
 
     with tab3:
 
@@ -1217,90 +1925,76 @@ if "results" in st.session_state:
                 broken_links
             )
 
-            st.error(
-                f"{len(broken_links)} broken link(s) detected."
-            )
-
             st.dataframe(
                 broken_df,
                 use_container_width=True,
                 hide_index=True,
             )
 
-            csv = broken_df.to_csv(
-                index=False
-            ).encode("utf-8")
+            broken_csv = (
+                broken_df
+                .to_csv(
+                    index=False
+                )
+                .encode(
+                    "utf-8-sig"
+                )
+            )
 
             st.download_button(
                 "⬇️ Download Broken Links CSV",
-                csv,
-                "broken_links.csv",
-                "text/csv",
+                data=broken_csv,
+                file_name=(
+                    "Broken_Links.csv"
+                ),
+                mime="text/csv",
+                use_container_width=True,
             )
 
         else:
 
             st.success(
-                "No broken links detected in "
-                "the checked pages."
+                "No broken links detected."
             )
 
-
-    # =====================================================
+    # -----------------------------------------------------
     # TECHNICAL
-    # =====================================================
+    # -----------------------------------------------------
 
     with tab4:
 
-        robots = technical_files["robots"]
-        sitemap = technical_files["sitemap"]
+        if technical_data:
 
-        col1, col2 = st.columns(2)
-
-        with col1:
-
-            st.subheader(
-                "🤖 robots.txt"
+            st.json(
+                technical_data
             )
 
-            if robots["working"]:
+        else:
 
-                st.success(
-                    f"Found — HTTP {robots['status']}"
-                )
-
-            else:
-
-                st.warning(
-                    "robots.txt not found or unavailable."
-                )
-
-        with col2:
-
-            st.subheader(
-                "🗺️ sitemap.xml"
+            st.info(
+                "No technical data available."
             )
-
-            if sitemap["working"]:
-
-                st.success(
-                    f"Found — HTTP {sitemap['status']}"
-                )
-
-            else:
-
-                st.warning(
-                    "sitemap.xml not found or unavailable."
-                )
 
 
 # =========================================================
 # FOOTER
 # =========================================================
 
-st.divider()
+st.markdown(
+    """
+<hr>
 
-st.caption(
-    "Agency SEO Auditor v5.0 | "
-    "Professional SEO analysis and client reporting platform."
+<div style="
+text-align:center;
+color:#64748b;
+padding:20px;
+">
+
+<b>Agency SEO Auditor v6.0</b>
+<br>
+Professional SEO analysis and client reporting platform
+
+</div>
+""",
+    unsafe_allow_html=True,
 )
