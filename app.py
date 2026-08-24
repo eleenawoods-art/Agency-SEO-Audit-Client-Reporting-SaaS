@@ -1850,151 +1850,51 @@ Status: {category_status}
                 hide_index=True,
             )
 
-            # Clean CSV
-            csv_bytes = (
-                filtered_df
-                .to_csv(
-                    index=False
-                )
-                .encode(
-                    "utf-8-sig"
-                )
-            )
+.action-card {
+    background: #ffffff !important;
+    color: #111827 !important;
+    border-radius: 16px;
+    padding: 20px 24px;
+    margin-bottom: 18px;
+    border: 1px solid #e5e7eb;
+}
 
-            st.download_button(
-                "⬇️ Download Clean CSV",
-                data=csv_bytes,
-                file_name=(
-                    "SEO_Audit_Findings.csv"
-                ),
-                mime="text/csv",
-                use_container_width=True,
-            )
+.action-card * {
+    color: #111827 !important;
+}
 
-    # -----------------------------------------------------
-    # PAGES
-    # -----------------------------------------------------
+.action-card b,
+.action-card strong {
+    color: #111827 !important;
+    font-weight: 700;
+}
 
-    with tab2:
+.action-card small {
+    color: #4b5563 !important;
+}
 
-        if pages:
+.action-number {
+    color: #ffffff !important;
+    background: #2563eb;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    margin-right: 10px;
+}
 
-            pages_df = pd.DataFrame(
-                pages
-            )
+.action-title {
+    color: #111827 !important;
+    font-size: 17px;
+    font-weight: 700;
+}
 
-            st.dataframe(
-                pages_df,
-                use_container_width=True,
-                hide_index=True,
-            )
-
-            pages_csv = (
-                pages_df
-                .to_csv(
-                    index=False
-                )
-                .encode(
-                    "utf-8-sig"
-                )
-            )
-
-            st.download_button(
-                "⬇️ Download Pages CSV",
-                data=pages_csv,
-                file_name="Crawled_Pages.csv",
-                mime="text/csv",
-                use_container_width=True,
-            )
-
-        else:
-
-            st.info(
-                "No crawled pages available."
-            )
-
-    # -----------------------------------------------------
-    # BROKEN LINKS
-    # -----------------------------------------------------
-
-    with tab3:
-
-        if broken_links:
-
-            broken_df = pd.DataFrame(
-                broken_links
-            )
-
-            st.dataframe(
-                broken_df,
-                use_container_width=True,
-                hide_index=True,
-            )
-
-            broken_csv = (
-                broken_df
-                .to_csv(
-                    index=False
-                )
-                .encode(
-                    "utf-8-sig"
-                )
-            )
-
-            st.download_button(
-                "⬇️ Download Broken Links CSV",
-                data=broken_csv,
-                file_name=(
-                    "Broken_Links.csv"
-                ),
-                mime="text/csv",
-                use_container_width=True,
-            )
-
-        else:
-
-            st.success(
-                "No broken links detected."
-            )
-
-    # -----------------------------------------------------
-    # TECHNICAL
-    # -----------------------------------------------------
-
-    with tab4:
-
-        if technical_data:
-
-            st.json(
-                technical_data
-            )
-
-        else:
-
-            st.info(
-                "No technical data available."
-            )
-
-
-# =========================================================
-# FOOTER
-# =========================================================
-
-st.markdown(
-    """
-<hr>
-
-<div style="
-text-align:center;
-color:#64748b;
-padding:20px;
-">
-
-<b>Agency SEO Auditor v6.0</b>
-<br>
-Professional SEO analysis and client reporting platform
-
-</div>
-""",
-    unsafe_allow_html=True,
-)
+.action-fix {
+    color: #4b5563 !important;
+    font-size: 14px;
+    line-height: 1.6;
+    margin-top: 8px;
+}
