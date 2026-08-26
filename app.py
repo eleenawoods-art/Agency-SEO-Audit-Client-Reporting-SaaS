@@ -194,6 +194,27 @@ h1, h2, h3 {
     border-radius: 14px;
     padding: 17px;
     margin: 9px 0;
+    color: #172554 !important;
+    font-size: 15px;
+    line-height: 1.55;
+}
+
+.action-card b {
+    color: #172554 !important;
+}
+
+.action-card small {
+    color: #475569 !important;
+    font-size: 13px;
+}
+
+.action-card .action-fix {
+    color: #334155 !important;
+    margin-top: 6px;
+}
+
+.action-card .action-fix b {
+    color: #172554 !important;
 }
 
 .action-number {
@@ -1627,9 +1648,8 @@ Status: {category_status}
 
 <br><br>
 
-<small>
-<b>Recommended Fix:</b>
-{action["recommendation"]}
+<small class="action-fix">
+<b>Recommended Fix:</b> {action["recommendation"]}
 </small>
 
 </div>
@@ -1847,15 +1867,7 @@ Status: {category_status}
             st.dataframe(
                 filtered_df,
                 width='stretch',
-                height=520,
                 hide_index=True,
-                column_config={
-                    "Severity": st.column_config.TextColumn("Severity", width="small"),
-                    "Category": st.column_config.TextColumn("Category", width="medium"),
-                    "Issue": st.column_config.TextColumn("Issue", width="large"),
-                    "Recommended Fix": st.column_config.TextColumn("Recommended Fix", width="large"),
-                    "Page / URL": st.column_config.TextColumn("Page / URL", width="large"),
-                },
             )
 
 
@@ -1864,35 +1876,14 @@ Status: {category_status}
         if pages_df.empty:
             st.info("No crawled pages available.")
         else:
-            st.dataframe(
-                pages_df,
-                width='stretch',
-                height=420,
-                hide_index=True,
-                column_config={
-                    "URL": st.column_config.TextColumn("URL", width="large"),
-                    "url": st.column_config.TextColumn("URL", width="large"),
-                    "Title": st.column_config.TextColumn("Title", width="large"),
-                },
-            )
+            st.dataframe(pages_df, width='stretch', hide_index=True)
 
     with tab3:
         broken_df = pd.DataFrame(broken_links)
         if broken_df.empty:
             st.success("No broken links detected.")
         else:
-            st.dataframe(
-                broken_df,
-                width='stretch',
-                height=420,
-                hide_index=True,
-                column_config={
-                    "URL": st.column_config.TextColumn("URL", width="large"),
-                    "url": st.column_config.TextColumn("URL", width="large"),
-                    "State": st.column_config.TextColumn("State", width="medium"),
-                    "Error": st.column_config.TextColumn("Error", width="large"),
-                },
-            )
+            st.dataframe(broken_df, width='stretch', hide_index=True)
 
     with tab4:
         if technical_data:
@@ -1901,16 +1892,7 @@ Status: {category_status}
                 if isinstance(value, (dict, list, tuple, set)):
                     value = str(value)
                 technical_rows.append({"Resource": str(key), "Value": value})
-            st.dataframe(
-                pd.DataFrame(technical_rows),
-                width='stretch',
-                height=360,
-                hide_index=True,
-                column_config={
-                    "Resource": st.column_config.TextColumn("Resource", width="medium"),
-                    "Value": st.column_config.TextColumn("Value", width="large"),
-                },
-            )
+            st.dataframe(pd.DataFrame(technical_rows), width='stretch', hide_index=True)
         else:
             st.info("No technical resource data available.")
 
