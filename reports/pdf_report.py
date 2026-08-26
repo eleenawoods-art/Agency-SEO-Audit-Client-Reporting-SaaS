@@ -240,7 +240,13 @@ def build_pdf_report(report_data, *args, **kwargs):
         url_rows.append([Paragraph(_safe(url), small), Paragraph(_safe(status), small)])
     if len(url_rows) == 1:
         url_rows.append([Paragraph("No page data available.", small), Paragraph("", small)])
-    urls_table = Table(url_rows, colWidths=[145 * mm, 31 * mm], repeatRows=1)
+    urls_table = Table(
+        url_rows,
+        colWidths=[142 * mm, 34 * mm],
+        repeatRows=1,
+        splitByRow=1,
+        hAlign="LEFT",
+    )
     urls_table.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1e3a8a")),
         ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
@@ -252,7 +258,7 @@ def build_pdf_report(report_data, *args, **kwargs):
         ("TOPPADDING", (0, 0), (-1, -1), 6),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
     ]))
-    story += [urls_table, Spacer(1, 12)]
+    story += [urls_table, Spacer(1, 8), PageBreak()]
 
     story.append(Paragraph("Broken Links", h1))
     if broken_links:
@@ -283,7 +289,8 @@ def build_pdf_report(report_data, *args, **kwargs):
     else:
         story.append(Paragraph("No broken-link records were returned for this audit.", body))
 
-    story += [Spacer(1, 12), Paragraph("Technical Checks", h1)]
+    story.append(PageBreak())
+    story.append(Paragraph("Technical Checks", h1))
     if isinstance(technical, dict) and technical:
         tech_rows = []
         for key, value in list(technical.items())[:40]:
