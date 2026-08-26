@@ -188,43 +188,12 @@ h1, h2, h3 {
     font-size: 14px;
 }
 
-/* Client-facing action plan cards */
 .action-card {
-    background: #ffffff !important;
-    color: #111827 !important;
-    border: 1px solid #e5e7eb;
-    border-radius: 16px;
-    padding: 20px 24px;
-    margin: 12px 0 18px 0;
-    box-shadow: 0 4px 14px rgba(15,23,42,.06);
-}
-
-.action-card * {
-    color: #111827 !important;
-}
-
-.action-card b {
-    color: #111827 !important;
-    font-weight: 700;
-}
-
-.action-card small {
-    color: #4b5563 !important;
-    font-size: 14px;
-    line-height: 1.6;
-}
-
-.action-number {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    background: #2563eb !important;
-    color: #ffffff !important;
-    width: 30px;
-    height: 30px;
-    border-radius: 50%;
-    margin-right: 10px;
-    font-weight: 700;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    padding: 17px;
+    margin: 9px 0;
 }
 
 .action-number {
@@ -906,7 +875,7 @@ audit_url = st.text_input(
 start_audit = st.button(
     "🚀 Start SEO Audit",
     type="primary",
-    use_container_width=True,
+    width='stretch',
 )
 
 
@@ -1736,7 +1705,7 @@ Status: {category_status}
                 + ".pdf"
             ),
             mime="application/pdf",
-            use_container_width=True,
+            width='stretch',
         )
 
     except Exception as error:
@@ -1796,7 +1765,7 @@ Status: {category_status}
                     "application/vnd.openxmlformats-"
                     "officedocument.spreadsheetml.sheet"
                 ),
-                use_container_width=True,
+                width='stretch',
             )
 
         except Exception as error:
@@ -1877,6 +1846,83 @@ Status: {category_status}
 
             st.dataframe(
                 filtered_df,
-                use_container_width=True,
+                width='stretch',
+                height=520,
                 hide_index=True,
+                column_config={
+                    "Severity": st.column_config.TextColumn("Severity", width="small"),
+                    "Category": st.column_config.TextColumn("Category", width="medium"),
+                    "Issue": st.column_config.TextColumn("Issue", width="large"),
+                    "Recommended Fix": st.column_config.TextColumn("Recommended Fix", width="large"),
+                    "Page / URL": st.column_config.TextColumn("Page / URL", width="large"),
+                },
             )
+
+
+    with tab2:
+        pages_df = pd.DataFrame(pages)
+        if pages_df.empty:
+            st.info("No crawled pages available.")
+        else:
+            st.dataframe(
+                pages_df,
+                width='stretch',
+                height=420,
+                hide_index=True,
+                column_config={
+                    "URL": st.column_config.TextColumn("URL", width="large"),
+                    "url": st.column_config.TextColumn("URL", width="large"),
+                    "Title": st.column_config.TextColumn("Title", width="large"),
+                },
+            )
+
+    with tab3:
+        broken_df = pd.DataFrame(broken_links)
+        if broken_df.empty:
+            st.success("No broken links detected.")
+        else:
+            st.dataframe(
+                broken_df,
+                width='stretch',
+                height=420,
+                hide_index=True,
+                column_config={
+                    "URL": st.column_config.TextColumn("URL", width="large"),
+                    "url": st.column_config.TextColumn("URL", width="large"),
+                    "State": st.column_config.TextColumn("State", width="medium"),
+                    "Error": st.column_config.TextColumn("Error", width="large"),
+                },
+            )
+
+    with tab4:
+        if technical_data:
+            technical_rows = []
+            for key, value in technical_data.items():
+                if isinstance(value, (dict, list, tuple, set)):
+                    value = str(value)
+                technical_rows.append({"Resource": str(key), "Value": value})
+            st.dataframe(
+                pd.DataFrame(technical_rows),
+                width='stretch',
+                height=360,
+                hide_index=True,
+                column_config={
+                    "Resource": st.column_config.TextColumn("Resource", width="medium"),
+                    "Value": st.column_config.TextColumn("Value", width="large"),
+                },
+            )
+        else:
+            st.info("No technical resource data available.")
+
+    csv_df = result_dataframe(all_results)
+    if not csv_df.empty:
+        st.download_button(
+            "⬇️ Download Audit CSV",
+            data=csv_df.to_csv(index=False).encode("utf-8"),
+            file_name="seo_audit_results.csv",
+            mime="text/csv",
+            width='stretch',
+        )
+
+st.divider()
+st.caption("Agency SEO Auditor v6.0 • Professional SEO auditing and client reporting platform")
